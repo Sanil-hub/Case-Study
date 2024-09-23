@@ -1,0 +1,634 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="initial-scale=1,user-scalable=no,maximum-scale=1,width=device-width">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <link rel="stylesheet" href="css/leaflet.css">
+        <link rel="stylesheet" href="css/L.Control.Layers.Tree.css">
+        <link rel="stylesheet" href="css/L.Control.Locate.min.css">
+        <link rel="stylesheet" href="css/qgis2web.css">
+        <link rel="stylesheet" href="css/fontawesome-all.min.css">
+        <link rel="stylesheet" href="css/leaflet-search.css">
+        <link rel="stylesheet" href="css/leaflet-control-geocoder.Geocoder.css">
+        <link rel="stylesheet" href="css/leaflet-measure.css">
+        <style>
+        html, body, #map {
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            margin: 0;
+        }
+        </style>
+        <title>Tourist Map of Sagarmatha National Park</title>
+    </head>
+    <body>
+        <div id="map">
+        </div>
+        <script src="js/qgis2web_expressions.js"></script>
+        <script src="js/leaflet.js"></script>
+        <script src="js/L.Control.Layers.Tree.min.js"></script>
+        <script src="js/L.Control.Locate.min.js"></script>
+        <script src="js/leaflet.rotatedMarker.js"></script>
+        <script src="js/leaflet.pattern.js"></script>
+        <script src="js/leaflet-hash.js"></script>
+        <script src="js/Autolinker.min.js"></script>
+        <script src="js/rbush.min.js"></script>
+        <script src="js/labelgun.min.js"></script>
+        <script src="js/labels.js"></script>
+        <script src="js/leaflet-control-geocoder.Geocoder.js"></script>
+        <script src="js/leaflet-measure.js"></script>
+        <script src="js/leaflet-search.js"></script>
+        <script src="data/NationalParkBoundary_1.js"></script>
+        <script src="data/VisitorCenter_2.js"></script>
+        <script src="data/Waterfalls_3.js"></script>
+        <script src="data/Campsite_4.js"></script>
+        <script src="data/TrailViewpoint_5.js"></script>
+        <script src="data/ParkingArea_6.js"></script>
+        <script>
+        var highlightLayer;
+        function highlightFeature(e) {
+            highlightLayer = e.target;
+            highlightLayer.openPopup();
+        }
+        var map = L.map('map', {
+            zoomControl:false, maxZoom:28, minZoom:1
+        })
+        var hash = new L.Hash(map);
+        map.attributionControl.setPrefix('<a href="https://github.com/tomchadwin/qgis2web" target="_blank">qgis2web</a> &middot; <a href="https://leafletjs.com" title="A JS library for interactive maps">Leaflet</a> &middot; <a href="https://qgis.org">QGIS</a>');
+        var autolinker = new Autolinker({truncate: {length: 30, location: 'smart'}});
+        // remove popup's row if "visible-with-data"
+        function removeEmptyRowsFromPopupContent(content, feature) {
+         var tempDiv = document.createElement('div');
+         tempDiv.innerHTML = content;
+         var rows = tempDiv.querySelectorAll('tr');
+         for (var i = 0; i < rows.length; i++) {
+             var td = rows[i].querySelector('td.visible-with-data');
+             var key = td ? td.id : '';
+             if (td && td.classList.contains('visible-with-data') && feature.properties[key] == null) {
+                 rows[i].parentNode.removeChild(rows[i]);
+             }
+         }
+         return tempDiv.innerHTML;
+        }
+        // add class to format popup if it contains media
+		function addClassToPopupIfMedia(content, popup) {
+			var tempDiv = document.createElement('div');
+			tempDiv.innerHTML = content;
+			if (tempDiv.querySelector('td img')) {
+				popup._contentNode.classList.add('media');
+					// Delay to force the redraw
+					setTimeout(function() {
+						popup.update();
+					}, 10);
+			} else {
+				popup._contentNode.classList.remove('media');
+			}
+		}
+        var title = new L.Control({'position':'topright'});
+        title.onAdd = function (map) {
+            this._div = L.DomUtil.create('div', 'info');
+            this.update();
+            return this._div;
+        };
+        title.update = function () {
+            this._div.innerHTML = '<h2>Tourist Map of Sagarmatha National Park</h2>';
+        };
+        title.addTo(map);
+        var abstract = new L.Control({'position':'bottomright'});
+        abstract.onAdd = function (map) {
+            this._div = L.DomUtil.create('div',
+            'leaflet-control abstract');
+            this._div.id = 'abstract'
+
+                abstract.show();
+                return this._div;
+            };
+            abstract.show = function () {
+                this._div.classList.remove("abstract");
+                this._div.classList.add("abstractUncollapsed");
+                this._div.innerHTML = 'This map shows useful informations about Sagarmatha National Parks such as trail viepoints, waterfalls, campsites, visitor centers, parking areas.';
+        };
+        abstract.addTo(map);
+        var zoomControl = L.control.zoom({
+            position: 'topleft'
+        }).addTo(map);
+        L.control.locate({locateOptions: {maxZoom: 19}}).addTo(map);
+        var measureControl = new L.Control.Measure({
+            position: 'topleft',
+            primaryLengthUnit: 'meters',
+            secondaryLengthUnit: 'kilometers',
+            primaryAreaUnit: 'sqmeters',
+            secondaryAreaUnit: 'hectares'
+        });
+        measureControl.addTo(map);
+        document.getElementsByClassName('leaflet-control-measure-toggle')[0].innerHTML = '';
+        document.getElementsByClassName('leaflet-control-measure-toggle')[0].className += ' fas fa-ruler';
+        var bounds_group = new L.featureGroup([]);
+        function setBounds() {
+            if (bounds_group.getLayers().length) {
+                map.fitBounds(bounds_group.getBounds());
+            }
+        }
+        map.createPane('pane_Positron_0');
+        map.getPane('pane_Positron_0').style.zIndex = 400;
+        var layer_Positron_0 = L.tileLayer('https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
+            pane: 'pane_Positron_0',
+            opacity: 1.0,
+            attribution: '<a href="https://cartodb.com/basemaps/">Map tiles by CartoDB, under CC BY 3.0. Data by OpenStreetMap, under ODbL.</a>',
+            minZoom: 1,
+            maxZoom: 28,
+            minNativeZoom: 0,
+            maxNativeZoom: 20
+        });
+        layer_Positron_0;
+        map.addLayer(layer_Positron_0);
+        function pop_NationalParkBoundary_1(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['WDPAID'] !== null ? autolinker.link(feature.properties['WDPAID'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['WDPA_PID'] !== null ? autolinker.link(feature.properties['WDPA_PID'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['PA_DEF'] !== null ? autolinker.link(feature.properties['PA_DEF'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['NAME'] !== null ? autolinker.link(feature.properties['NAME'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['ORIG_NAME'] !== null ? autolinker.link(feature.properties['ORIG_NAME'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['DESIG'] !== null ? autolinker.link(feature.properties['DESIG'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['DESIG_ENG'] !== null ? autolinker.link(feature.properties['DESIG_ENG'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['DESIG_TYPE'] !== null ? autolinker.link(feature.properties['DESIG_TYPE'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['IUCN_CAT'] !== null ? autolinker.link(feature.properties['IUCN_CAT'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['INT_CRIT'] !== null ? autolinker.link(feature.properties['INT_CRIT'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['MARINE'] !== null ? autolinker.link(feature.properties['MARINE'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['REP_M_AREA'] !== null ? autolinker.link(feature.properties['REP_M_AREA'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['GIS_M_AREA'] !== null ? autolinker.link(feature.properties['GIS_M_AREA'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['REP_AREA'] !== null ? autolinker.link(feature.properties['REP_AREA'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['GIS_AREA'] !== null ? autolinker.link(feature.properties['GIS_AREA'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['NO_TAKE'] !== null ? autolinker.link(feature.properties['NO_TAKE'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['NO_TK_AREA'] !== null ? autolinker.link(feature.properties['NO_TK_AREA'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['STATUS'] !== null ? autolinker.link(feature.properties['STATUS'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['STATUS_YR'] !== null ? autolinker.link(feature.properties['STATUS_YR'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['GOV_TYPE'] !== null ? autolinker.link(feature.properties['GOV_TYPE'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['OWN_TYPE'] !== null ? autolinker.link(feature.properties['OWN_TYPE'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['MANG_AUTH'] !== null ? autolinker.link(feature.properties['MANG_AUTH'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['MANG_PLAN'] !== null ? autolinker.link(feature.properties['MANG_PLAN'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['VERIF'] !== null ? autolinker.link(feature.properties['VERIF'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['METADATAID'] !== null ? autolinker.link(feature.properties['METADATAID'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['SUB_LOC'] !== null ? autolinker.link(feature.properties['SUB_LOC'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['PARENT_ISO'] !== null ? autolinker.link(feature.properties['PARENT_ISO'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['ISO3'] !== null ? autolinker.link(feature.properties['ISO3'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['SUPP_INFO'] !== null ? autolinker.link(feature.properties['SUPP_INFO'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['CONS_OBJ'] !== null ? autolinker.link(feature.properties['CONS_OBJ'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_NationalParkBoundary_1_0() {
+            return {
+                pane: 'pane_NationalParkBoundary_1',
+                opacity: 1,
+                color: 'rgba(8,197,30,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 2.0, 
+                fillOpacity: 0,
+                interactive: false,
+            }
+        }
+        map.createPane('pane_NationalParkBoundary_1');
+        map.getPane('pane_NationalParkBoundary_1').style.zIndex = 401;
+        map.getPane('pane_NationalParkBoundary_1').style['mix-blend-mode'] = 'normal';
+        var layer_NationalParkBoundary_1 = new L.geoJson(json_NationalParkBoundary_1, {
+            attribution: '',
+            interactive: false,
+            dataVar: 'json_NationalParkBoundary_1',
+            layerName: 'layer_NationalParkBoundary_1',
+            pane: 'pane_NationalParkBoundary_1',
+            onEachFeature: pop_NationalParkBoundary_1,
+            style: style_NationalParkBoundary_1_0,
+        });
+        bounds_group.addLayer(layer_NationalParkBoundary_1);
+        map.addLayer(layer_NationalParkBoundary_1);
+        function pop_VisitorCenter_2(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <th scope="row">Name</th>\
+                        <td class="visible-with-data" id="tourism">' + (feature.properties['tourism'] !== null ? autolinker.link(feature.properties['tourism'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Information</th>\
+                        <td class="visible-with-data" id="informatio">' + (feature.properties['informatio'] !== null ? autolinker.link(feature.properties['informatio'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_VisitorCenter_2_0() {
+            return {
+                pane: 'pane_VisitorCenter_2',
+        rotationAngle: 0.0,
+        rotationOrigin: 'center center',
+        icon: L.icon({
+            iconUrl: 'markers/VisitorCenter_2.svg',
+            iconSize: [13.68, 13.68]
+        }),
+                interactive: true,
+            }
+        }
+        map.createPane('pane_VisitorCenter_2');
+        map.getPane('pane_VisitorCenter_2').style.zIndex = 402;
+        map.getPane('pane_VisitorCenter_2').style['mix-blend-mode'] = 'normal';
+        var layer_VisitorCenter_2 = new L.geoJson(json_VisitorCenter_2, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_VisitorCenter_2',
+            layerName: 'layer_VisitorCenter_2',
+            pane: 'pane_VisitorCenter_2',
+            onEachFeature: pop_VisitorCenter_2,
+            pointToLayer: function (feature, latlng) {
+                var context = {
+                    feature: feature,
+                    variables: {}
+                };
+                return L.marker(latlng, style_VisitorCenter_2_0(feature));
+            },
+        });
+        bounds_group.addLayer(layer_VisitorCenter_2);
+        map.addLayer(layer_VisitorCenter_2);
+        function pop_Waterfalls_3(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <th scope="row">Name</th>\
+                        <td class="visible-with-data" id="waterway">' + (feature.properties['waterway'] !== null ? autolinker.link(feature.properties['waterway'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_Waterfalls_3_0() {
+            return {
+                pane: 'pane_Waterfalls_3',
+        rotationAngle: 0.0,
+        rotationOrigin: 'center center',
+        icon: L.icon({
+            iconUrl: 'markers/Waterfalls_3.svg',
+            iconSize: [22.799999999999997, 22.799999999999997]
+        }),
+                interactive: true,
+            }
+        }
+        map.createPane('pane_Waterfalls_3');
+        map.getPane('pane_Waterfalls_3').style.zIndex = 403;
+        map.getPane('pane_Waterfalls_3').style['mix-blend-mode'] = 'normal';
+        var layer_Waterfalls_3 = new L.geoJson(json_Waterfalls_3, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_Waterfalls_3',
+            layerName: 'layer_Waterfalls_3',
+            pane: 'pane_Waterfalls_3',
+            onEachFeature: pop_Waterfalls_3,
+            pointToLayer: function (feature, latlng) {
+                var context = {
+                    feature: feature,
+                    variables: {}
+                };
+                return L.marker(latlng, style_Waterfalls_3_0(feature));
+            },
+        });
+        bounds_group.addLayer(layer_Waterfalls_3);
+        map.addLayer(layer_Waterfalls_3);
+        function pop_Campsite_4(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <th scope="row">Basecamp Name</th>\
+                        <td class="visible-with-data" id="name">' + (feature.properties['name'] !== null ? autolinker.link(feature.properties['name'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Elevation</th>\
+                        <td class="visible-with-data" id="ele">' + (feature.properties['ele'] !== null ? autolinker.link(feature.properties['ele'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_Campsite_4_0() {
+            return {
+                pane: 'pane_Campsite_4',
+        rotationAngle: 0.0,
+        rotationOrigin: 'center center',
+        icon: L.icon({
+            iconUrl: 'markers/Campsite_4.svg',
+            iconSize: [13.68, 13.68]
+        }),
+                interactive: true,
+            }
+        }
+        map.createPane('pane_Campsite_4');
+        map.getPane('pane_Campsite_4').style.zIndex = 404;
+        map.getPane('pane_Campsite_4').style['mix-blend-mode'] = 'normal';
+        var layer_Campsite_4 = new L.geoJson(json_Campsite_4, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_Campsite_4',
+            layerName: 'layer_Campsite_4',
+            pane: 'pane_Campsite_4',
+            onEachFeature: pop_Campsite_4,
+            pointToLayer: function (feature, latlng) {
+                var context = {
+                    feature: feature,
+                    variables: {}
+                };
+                return L.marker(latlng, style_Campsite_4_0(feature));
+            },
+        });
+        bounds_group.addLayer(layer_Campsite_4);
+        map.addLayer(layer_Campsite_4);
+        function pop_TrailViewpoint_5(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <th scope="row">Viewpoint Name</th>\
+                        <td class="visible-with-data" id="name_en">' + (feature.properties['name_en'] !== null ? autolinker.link(feature.properties['name_en'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_TrailViewpoint_5_0() {
+            return {
+                pane: 'pane_TrailViewpoint_5',
+        rotationAngle: 0.0,
+        rotationOrigin: 'center center',
+        icon: L.icon({
+            iconUrl: 'markers/TrailViewpoint_5.svg',
+            iconSize: [15.2, 15.2]
+        }),
+                interactive: true,
+            }
+        }
+        map.createPane('pane_TrailViewpoint_5');
+        map.getPane('pane_TrailViewpoint_5').style.zIndex = 405;
+        map.getPane('pane_TrailViewpoint_5').style['mix-blend-mode'] = 'normal';
+        var layer_TrailViewpoint_5 = new L.geoJson(json_TrailViewpoint_5, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_TrailViewpoint_5',
+            layerName: 'layer_TrailViewpoint_5',
+            pane: 'pane_TrailViewpoint_5',
+            onEachFeature: pop_TrailViewpoint_5,
+            pointToLayer: function (feature, latlng) {
+                var context = {
+                    feature: feature,
+                    variables: {}
+                };
+                return L.marker(latlng, style_TrailViewpoint_5_0(feature));
+            },
+        });
+        bounds_group.addLayer(layer_TrailViewpoint_5);
+        map.addLayer(layer_TrailViewpoint_5);
+        function pop_ParkingArea_6(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <th scope="row">Parking Type</th>\
+                        <td class="visible-with-data" id="Type">' + (feature.properties['Type'] !== null ? autolinker.link(feature.properties['Type'].toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_ParkingArea_6_0() {
+            return {
+                pane: 'pane_ParkingArea_6',
+        rotationAngle: 0.0,
+        rotationOrigin: 'center center',
+        icon: L.icon({
+            iconUrl: 'markers/ParkingArea_6.svg',
+            iconSize: [13.68, 13.68]
+        }),
+                interactive: true,
+            }
+        }
+        map.createPane('pane_ParkingArea_6');
+        map.getPane('pane_ParkingArea_6').style.zIndex = 406;
+        map.getPane('pane_ParkingArea_6').style['mix-blend-mode'] = 'normal';
+        var layer_ParkingArea_6 = new L.geoJson(json_ParkingArea_6, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_ParkingArea_6',
+            layerName: 'layer_ParkingArea_6',
+            pane: 'pane_ParkingArea_6',
+            onEachFeature: pop_ParkingArea_6,
+            pointToLayer: function (feature, latlng) {
+                var context = {
+                    feature: feature,
+                    variables: {}
+                };
+                return L.marker(latlng, style_ParkingArea_6_0(feature));
+            },
+        });
+        bounds_group.addLayer(layer_ParkingArea_6);
+        map.addLayer(layer_ParkingArea_6);
+        var osmGeocoder = new L.Control.Geocoder({
+            collapsed: true,
+            position: 'topleft',
+            text: 'Search',
+            title: 'Testing'
+        }).addTo(map);
+        document.getElementsByClassName('leaflet-control-geocoder-icon')[0]
+        .className += ' fa fa-search';
+        document.getElementsByClassName('leaflet-control-geocoder-icon')[0]
+        .title += 'Search for a place';
+        var baseMaps = {};
+        var overlaysTree = [
+            {label: '<img src="legend/ParkingArea_6.png" /> Parking Area', layer: layer_ParkingArea_6},
+            {label: '<img src="legend/TrailViewpoint_5.png" /> Trail Viewpoint', layer: layer_TrailViewpoint_5},
+            {label: '<img src="legend/Campsite_4.png" /> Campsite', layer: layer_Campsite_4},
+            {label: '<img src="legend/Waterfalls_3.png" /> Waterfalls', layer: layer_Waterfalls_3},
+            {label: '<img src="legend/VisitorCenter_2.png" /> Visitor Center', layer: layer_VisitorCenter_2},
+            {label: '<img src="legend/NationalParkBoundary_1.png" /> National Park Boundary', layer: layer_NationalParkBoundary_1},
+            {label: "Positron", layer: layer_Positron_0},]
+        var lay = L.control.layers.tree(null, overlaysTree,{
+            //namedToggle: true,
+            //selectorBack: false,
+            //closedSymbol: '&#8862; &#x1f5c0;',
+            //openedSymbol: '&#8863; &#x1f5c1;',
+            //collapseAll: 'Collapse all',
+            //expandAll: 'Expand all',
+            collapsed: true,
+        });
+        lay.addTo(map);
+        setBounds();
+        map.addControl(new L.Control.Search({
+            layer: layer_Campsite_4,
+            initial: false,
+            hideMarkerOnCollapse: true,
+            propertyName: 'name'}));
+        document.getElementsByClassName('search-button')[0].className +=
+         ' fa fa-binoculars';
+        resetLabels([layer_NationalParkBoundary_1]);
+        map.on("zoomend", function(){
+            resetLabels([layer_NationalParkBoundary_1]);
+        });
+        map.on("layeradd", function(){
+            resetLabels([layer_NationalParkBoundary_1]);
+        });
+        map.on("layerremove", function(){
+            resetLabels([layer_NationalParkBoundary_1]);
+        });
+        </script>
+    </body>
+</html>
